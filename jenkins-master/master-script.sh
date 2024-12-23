@@ -20,7 +20,8 @@ sudo yum install jenkins -y
 sudo systemctl daemon-reload
 sudo systemctl enable jenkins
 sudo systemctl start jenkins
-sudo systemctl status jenkins
+# Check Jenkins status
+sudo systemctl is-active --quiet jenkins && echo "Jenkins is running"
 
 
 

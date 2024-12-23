@@ -55,9 +55,10 @@ resource "aws_instance" "master" {
 
   instance_type          = "t2.micro"
   ami = data.aws_ami.master_ami.id
-  vpc_security_group_ids = [data.aws_ssm_parameter.jenkins_master_sg_id.value]
+  vpc_security_group_ids = [module.jenkins_master_sg.sg_id]
   subnet_id              = data.aws_subnet.master.id
   associate_public_ip_address = true
+ 
 
   tags = merge(
     var.common_tags,
@@ -116,8 +117,120 @@ resource "aws_ebs_volume" "master_volume" {
   }
 }
 
+
+
 resource "aws_volume_attachment" "ebs_att" {
   device_name = "/dev/sdb"
   volume_id   = aws_ebs_volume.master_volume.id
   instance_id = aws_instance.master.id
+}
+
+
+
+
+
+resource "aws_instance" "agent" {
+
+  instance_type          = "t2.micro"
+  ami = data.aws_ami.master_ami.id
+  vpc_security_group_ids = [module.jenkins_master_sg.sg_id]
+  subnet_id              = data.aws_subnet.master.id
+  associate_public_ip_address = true
+ 
+
+  tags = merge(
+    var.common_tags,
+    var.master_tags,
+    {
+      Name= "jenkins-agent"
+    }
+  )
+}
+
+
+resource "null_resource" "agent_scripts" {
+  # Changes to any instance of the cluster requires re-provisioning
+  triggers = {
+    instance_id = aws_instance.agent.id
+  }
+
+  # Bootstrap script can run on any instance of the cluster
+  # So we just choose the first in this case
+  connection {
+    host = aws_instance.agent.public_ip
+    type = "ssh"
+    user = "ec2-user"
+    password = "DevOps321"
+  }
+
+  provisioner "file" {
+    source = "agent.sh"
+    destination = "/tmp/agent.sh"
+  }
+
+  provisioner "remote-exec" {
+    # Bootstrap script called with private_ip of each node in the cluster
+    inline = [
+      "sudo chmod +x /tmp/agent.sh",
+      "sudo sh /tmp/agent.sh"
+    ]
+  }
+}
+
+resource "aws_route_table_association" "jenkins_agent" {
+  subnet_id      = data.aws_subnet.master.id
+  route_table_id = data.aws_route_table.master.id
+}
+
+
+resource "aws_ebs_volume" "agent_volume" {
+  availability_zone = "us-east-1a"
+  size              = 50
+  type = "gp3"
+  throughput = 125
+  iops = 3000
+
+  tags = {
+    Name = "agent_vol"
+  }
+}
+
+
+
+resource "aws_volume_attachment" "agent_ebs_att" {
+  device_name = "/dev/sdb"
+  volume_id   = aws_ebs_volume.agent_volume.id
+  instance_id = aws_instance.agent.id
+}
+
+
+
+
+
+module "records" {
+  source  = "terraform-aws-modules/route53/aws//modules/records"
+  version = "~> 2.0"
+
+  zone_name = var.zone_name
+
+  records = [
+    {
+      name    = "jenkins"
+      type    = "A"
+      ttl     = 1
+      records = [
+        aws_instance.master.public_ip
+      ]
+      allow_overwrite = true
+    },
+    {
+      name    = "jenkins-agent"
+      type    = "A"
+      ttl     = 1
+      records = [aws_instance.agent.private_ip]
+      
+      allow_overwrite = true
+    }
+  ]
+
 }

@@ -1,3 +1,3 @@
 locals {
-    resource_name = "jenkins-master-${var.project}-${var.docker_tags.component}"
+    resource_name = "${var.project}-${var.master_tags.component}"
 }

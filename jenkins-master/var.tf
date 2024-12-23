@@ -17,7 +17,13 @@ variable "common_tags" {
 
 variable "master_tags" {
     default = {
-        component = "jenkins"
+        component = "jenkins-master"
     }
   
+}
+
+variable "zone_name" {
+  type        = string
+  default     = "expensemind.online"
+  description = "description"
 }
